@@ -9,6 +9,7 @@ import (
 
 	"github.com/s0rc3r3r01/sampleService/app/services/sales-api/handlers/debug/checkgrp"
 	"github.com/s0rc3r3r01/sampleService/app/services/sales-api/handlers/v1/testgrp"
+	"github.com/s0rc3r3r01/sampleService/foundation/web"
 
 	"github.com/dimfeld/httptreemux/v5"
 	"go.uber.org/zap"
@@ -38,7 +39,8 @@ type APIMuxConfig struct {
 }
 
 // APIMux constructs a http.Handler with all application routes defined.
-func APIMux(cfg APIMuxConfig) *httptreemux.ContextMux {
+func APIMux(cfg APIMuxConfig) *web.App {
+	app := web.NewApp(cfg.Shutdown)
 	mux := httptreemux.NewContextMux()
 
 	tgh := testgrp.Handlers{
@@ -46,7 +48,7 @@ func APIMux(cfg APIMuxConfig) *httptreemux.ContextMux {
 	}
 	mux.Handle(http.MethodGet, "/v1/test", tgh.Test)
 
-	return mux
+	return app
 }
 
 // DebugMux registers all the debug standard library routes and then custom
