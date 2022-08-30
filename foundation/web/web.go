@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/dimfeld/httptreemux/v5"
+	"github.com/google/uuid"
 )
 
 // A Handler is a type that handles a http request within our own little mini
@@ -47,11 +49,27 @@ func (a *App) Handle(method string, group string, path string, handler Handler, 
 	handler = wrapMiddleware(a.mw, handler)
 
 	h := func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		// Set the context with the required values to
+		// process the request.
+		v := Values{
+			TraceID: uuid.New().String(),
+			Now:     time.Now().UTC(),
+		}
+		ctx = context.WithValue(ctx, key, &v)
 
-		if err := handler(r.Context(), w, r); err != nil {
-			//error handling
+		// Call the wrapped handler functions.
+		if err := handler(ctx, w, r); err != nil {
+			// Since there was an error, validate the condition of this
+			// error and determine if we need to actually shutdown or not.
+			a.SignalShutdown()
 			return
 		}
+	}
+
+	if err := handler(r.Context(), w, r); err != nil {
+		//error handling
+		return
 	}
 	finalPath := path
 	if group != "" {
