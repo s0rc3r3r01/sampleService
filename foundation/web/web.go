@@ -67,10 +67,6 @@ func (a *App) Handle(method string, group string, path string, handler Handler, 
 		}
 	}
 
-	if err := handler(r.Context(), w, r); err != nil {
-		//error handling
-		return
-	}
 	finalPath := path
 	if group != "" {
 		finalPath = "/" + group + path
