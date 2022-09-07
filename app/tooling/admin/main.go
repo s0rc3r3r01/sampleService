@@ -5,7 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -13,7 +15,7 @@ import (
 )
 
 func main() {
-	err := genKey()
+	err := genToken()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -49,6 +51,83 @@ func genToken() error {
 	method := jwt.GetSigningMethod("RS256")
 	token := jwt.NewWithClaims(method, claims)
 	token.Header["kid"] = "private"
+
+	name := "zarf/keys/private.pem"
+	file, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// limit PEM file size to 1 megabyte. This should be reasonable for
+	// almost any PEM file and prevents shenanigans like linking the file
+	// to /dev/random or something like that.
+	privatePEM, err := io.ReadAll(io.LimitReader(file, 1024*1024))
+	if err != nil {
+		return fmt.Errorf("reading auth private key: %w", err)
+	}
+
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privatePEM)
+	if err != nil {
+		return fmt.Errorf("parsing auth private key: %w", err)
+	}
+
+	tokenStr, err := token.SignedString(privateKey)
+	if err != nil {
+		return err
+	}
+	fmt.Println("BEGIN TOKEN")
+	fmt.Println(tokenStr)
+	fmt.Println("END TOKEN")
+
+	// Marshal the public key from the private key to PKIX.
+	asn1Bytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return fmt.Errorf("marshaling public key: %w", err)
+	}
+
+	// Construct a PEM block for the public key.
+	publicBlock := pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: asn1Bytes,
+	}
+
+	// Write the public key to the private key file.
+	if err := pem.Encode(os.Stdout, &publicBlock); err != nil {
+		return fmt.Errorf("encoding to public file: %w", err)
+	}
+
+	parser := jwt.Parser{
+		ValidMethods: []string{"RS256"},
+	}
+
+	var parsedClaiam struct {
+		jwt.StandardClaims
+		Roles []string
+	}
+
+	keyFunc := func(t *jwt.Token) (interface{}, error) {
+		kid, ok := t.Header["kid"]
+		if !ok {
+			return nil, errors.New("missing key id (kid) in token header")
+		}
+		kidID, ok := kid.(string)
+		if !ok {
+			return nil, errors.New("user token key id (kid) must be string")
+		}
+		fmt.Println("KID:", kidID)
+		return &privateKey.PublicKey, nil
+	}
+
+	parsedToken, err := parser.ParseWithClaims(tokenStr, &parsedClaiam, keyFunc)
+	if err != nil {
+		return errors.New("failed at Parsing")
+	}
+	if !parsedToken.Valid {
+		return errors.New("invalid token")
+	}
+	fmt.Println("Token Validated")
+
 	return nil
 }
 
@@ -102,5 +181,6 @@ func genKey() error {
 	}
 
 	fmt.Println("private and public key files generated")
+
 	return nil
 }
