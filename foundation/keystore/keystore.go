@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -47,7 +48,8 @@ func NewFS(fsys fs.FS) (*KeyStore, error) {
 
 	fn := func(fileName string, dirEntry fs.DirEntry, err error) error {
 		if err != nil {
-			return fmt.Errorf("walkdir failure: %w", err)
+			abs, err := filepath.Abs(fileName)
+			return fmt.Errorf("walkdir failure: %w in directory %s", err, abs)
 		}
 
 		if dirEntry.IsDir() {
@@ -74,7 +76,7 @@ func NewFS(fsys fs.FS) (*KeyStore, error) {
 
 		privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privatePEM)
 		if err != nil {
-			return fmt.Errorf("parsing auth private key: %w", err)
+			return fmt.Errorf("parsing auth private key: %w with private key %s", err, privatePEM)
 		}
 
 		ks.store[strings.TrimSuffix(dirEntry.Name(), ".pem")] = privateKey
@@ -82,7 +84,7 @@ func NewFS(fsys fs.FS) (*KeyStore, error) {
 	}
 
 	if err := fs.WalkDir(fsys, ".", fn); err != nil {
-		return nil, fmt.Errorf("walking directory: %w", err)
+		return nil, fmt.Errorf("walking directory: %w %s", err, fsys)
 	}
 
 	return &ks, nil

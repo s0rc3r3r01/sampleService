@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/s0rc3r3r01/sampleService/business/sys/auth"
+	"github.com/s0rc3r3r01/sampleService/business/auth"
 	"github.com/s0rc3r3r01/sampleService/business/sys/validate"
 	"github.com/s0rc3r3r01/sampleService/foundation/web"
 )
