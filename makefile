@@ -9,6 +9,14 @@ run:
 admin:
 	go run app/tooling/admin/main.go
 # ==============================================================================
+#tests
+test:
+	go test ./... -count=1
+	staticcheck -checks=all ./...
+
+
+
+# ==============================================================================
 # Building containers
 
 VERSION := 1.0
