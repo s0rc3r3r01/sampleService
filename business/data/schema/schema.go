@@ -8,7 +8,7 @@ import (
 
 	"github.com/ardanlabs/darwin"
 	"github.com/jmoiron/sqlx"
-	"github.com/s0rc3r3r01/sampleService/service/business/sys/database"
+	"github.com/s0rc3r3r01/sampleService/business/sys/database"
 )
 
 var (
