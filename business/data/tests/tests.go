@@ -4,6 +4,8 @@ package tests
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"os"
@@ -11,9 +13,12 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/s0rc3r3r01/sampleService/business/auth"
 	"github.com/s0rc3r3r01/sampleService/business/data/schema"
+	"github.com/s0rc3r3r01/sampleService/business/data/store/user"
 	"github.com/s0rc3r3r01/sampleService/business/sys/database"
 	"github.com/s0rc3r3r01/sampleService/foundation/docker"
+	"github.com/s0rc3r3r01/sampleService/foundation/keystore"
 	"github.com/s0rc3r3r01/sampleService/foundation/logger"
 	"go.uber.org/zap"
 )
@@ -93,6 +98,62 @@ func NewUnit(t *testing.T, dbc DBContainer) (*zap.SugaredLogger, *sqlx.DB, func(
 	}
 
 	return log, db, teardown
+}
+
+// Test owns state for running and shutting down tests.
+type Test struct {
+	DB       *sqlx.DB
+	Log      *zap.SugaredLogger
+	Auth     *auth.Auth
+	Teardown func()
+
+	t *testing.T
+}
+
+// NewIntegration creates a database, seeds it, constructs an authenticator.
+func NewIntegration(t *testing.T, dbc DBContainer) *Test {
+	log, db, teardown := NewUnit(t, dbc)
+
+	// Create RSA keys to enable authentication in our service.
+	keyID := "any-other-random-key-id"
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Build an authenticator using this private key and id for the key store.
+	auth, err := auth.New(keyID, keystore.NewMap(map[string]*rsa.PrivateKey{keyID: privateKey}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	test := Test{
+		DB:       db,
+		Log:      log,
+		Auth:     auth,
+		t:        t,
+		Teardown: teardown,
+	}
+
+	return &test
+}
+
+// Token generates an authenticated token for a user.
+func (test *Test) Token(email, pass string) string {
+	test.t.Log("Generating token for test ...")
+
+	store := user.NewStore(test.Log, test.DB)
+	claims, err := store.Authenticate(context.Background(), time.Now(), email, pass)
+	if err != nil {
+		test.t.Fatal(err)
+	}
+
+	token, err := test.Auth.GenerateToken(claims)
+	if err != nil {
+		test.t.Fatal(err)
+	}
+
+	return token
 }
 
 // StringPointer is a helper to get a *string from a string. It is in the tests
